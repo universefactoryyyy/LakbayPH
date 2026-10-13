@@ -24,6 +24,7 @@ signup_form = {}
 profile_form = {}
 review_form = {}
 slot_check = {}
+gallery = {}
 
 # Hero banner
 hero_canvas = None
@@ -31,8 +32,13 @@ hero_button = None
 hero_packages = []
 hero_index = 0
 hero_timer = None
-HERO_WIDTH = 1060
-HERO_HEIGHT = 430
+hero_resize_job = None
+hero_width = 1060
+hero_height = 430
+
+# The card grids on the open page, as (grid frame, most columns).
+# They get more columns when the window is wider.
+card_grids = []
 
 # Destinations page
 results_frame = None
@@ -186,20 +192,54 @@ def rating_text(package):
     return stars_text(package["AvgRating"]) + "  " + str(package["AvgRating"]) + " (" + str(package["ReviewCount"]) + ")"
 
 
-# Show package cards in rows of 4
-def show_card_grid(parent, packages, columns=4):
+# Show package cards in rows (as many cards per row as fit, up to max_columns)
+def show_card_grid(parent, packages, max_columns=6):
     grid = Frame(parent, bg=WHITE)
     grid.pack(pady=px(6))
-    number = 0
     for package in packages:
-        card = make_package_card(grid, package)
+        make_package_card(grid, package)
+    card_grids.append((grid, max_columns))
+    arrange_cards(grid, columns_for_width(parent.winfo_toplevel().winfo_width(), max_columns))
+    return grid
+
+
+# How many cards fit next to each other in this width
+def columns_for_width(width, max_columns):
+    if width <= 1:
+        width = px(1100)
+    columns = (width - px(40)) // px(260)
+    return max(1, min(columns, max_columns))
+
+
+# Put the cards of a grid in rows of this many columns
+def arrange_cards(grid, columns):
+    number = 0
+    for card in grid.winfo_children():
         card.grid(row=number // columns, column=number % columns, padx=px(8), pady=px(8), sticky="nsew")
         number = number + 1
-    return grid
+
+
+# The window changed size: re-arrange the cards and redraw the hero
+def on_page_resize(width):
+    for item in card_grids:
+        if item[0].winfo_exists():
+            arrange_cards(item[0], columns_for_width(width, item[1]))
+    if hero_canvas is not None and hero_canvas.winfo_exists() and width != hero_width:
+        resize_hero(width)
+
+
+# Start a page that has card grids (forget the grids of the old page)
+def start_card_page():
+    card_grids.clear()
+    helpers.resize_function = on_page_resize
 
 
 # The dark footer at the bottom of the user pages
 def build_footer(parent):
+    # The page canvas gets the footer color, so no white shows under the footer
+    # when the page is shorter than the window
+    if helpers.scroll_canvas is not None:
+        helpers.scroll_canvas.config(bg=DEEP_TEAL)
     footer = Frame(parent, bg=DEEP_TEAL, pady=px(26))
     footer.pack(fill=X, pady=(px(40), 0))
     columns = Frame(footer, bg=DEEP_TEAL)
@@ -235,12 +275,13 @@ def make_footer_link(parent, text, target_page):
 # The home page: hero, search bar, most booked, recently added, categories, reviews
 def show_home_page(parent, data):
     page = make_scroll_area(parent)
+    start_card_page()
     build_hero(page)
     build_search_bar(page)
     add_section_title(page, "Most Booked", "Our travelers' favorite trips")
-    show_card_grid(page, database.get_most_booked(4))
+    show_card_grid(page, database.get_most_booked(4), 4)
     add_section_title(page, "Recently Added", "Fresh trips you can book now")
-    show_card_grid(page, database.get_recent_packages(4))
+    show_card_grid(page, database.get_recent_packages(4), 4)
     build_category_buttons(page)
     build_home_reviews(page)
     build_footer(page)
@@ -252,9 +293,9 @@ def build_hero(parent):
     stop_hero_timer()
     hero_packages = database.get_most_booked(4)
     hero_index = 0
-    hero_canvas = Canvas(parent, width=px(HERO_WIDTH), height=px(HERO_HEIGHT),
-                         highlightthickness=0, bg=DEEP_TEAL)
-    hero_canvas.pack()
+    set_hero_size(parent.winfo_toplevel().winfo_width())
+    hero_canvas = Canvas(parent, width=hero_width, height=hero_height, highlightthickness=0, bg=DEEP_TEAL)
+    hero_canvas.pack(fill=X)
     hero_button = Button(hero_canvas, text="FIND OUT MORE", command=open_hero_package, bg=TEAL, fg=WHITE,
                          relief=FLAT, font=(FONT, 11, "bold"), padx=px(22), pady=px(8), cursor="hand2",
                          activebackground=WHITE, activeforeground=DARK_TEAL)
@@ -265,48 +306,65 @@ def build_hero(parent):
         start_hero_timer()
 
 
+# The hero is as wide as the window, and a bit taller on big screens
+def set_hero_size(width):
+    global hero_width, hero_height
+    if width <= 1:
+        width = px(1100)
+    hero_width = width
+    hero_height = min(max(px(430), int(width * 0.3)), px(540))
+
+
+# The window changed size: redraw the hero once the resizing stops
+def resize_hero(width):
+    global hero_resize_job
+    if hero_resize_job is not None:
+        hero_canvas.after_cancel(hero_resize_job)
+    hero_resize_job = hero_canvas.after(150, redraw_hero_size, width)
+
+
+# Give the hero its new size and draw it again
+def redraw_hero_size(width):
+    global hero_resize_job
+    hero_resize_job = None
+    if hero_canvas is None or not hero_canvas.winfo_exists():
+        return
+    set_hero_size(width)
+    hero_canvas.config(height=hero_height)
+    if len(hero_packages) > 0:
+        draw_hero()
+
+
 # Draw everything on the hero canvas for the current photo
 def draw_hero():
     hero_canvas.delete("all")
     package = hero_packages[hero_index]
-    photo = load_image(package["ImageFileName"], px(HERO_WIDTH), px(HERO_HEIGHT), dark=True)
+    photo = load_image(package["ImageFileName"], hero_width, hero_height, dark=True)
     hero_canvas.create_image(0, 0, image=photo, anchor="nw")
-    draw_social_column()
     draw_hero_text(package)
     draw_hero_thumbnails()
     draw_hero_dots()
 
 
-# The thin column of social icons on the left
-def draw_social_column():
-    hero_canvas.create_rectangle(0, 0, px(52), px(HERO_HEIGHT), fill=DEEP_TEAL, outline="")
-    hero_canvas.create_text(px(26), px(70), text="FOLLOW US", angle=90, fill=WHITE, font=(FONT, 8, "bold"))
-    hero_canvas.create_line(px(26), px(125), px(26), px(165), fill=TEAL, width=2)
-    y = px(200)
-    for icon in ["f", "ig", "X", "▶"]:
-        hero_canvas.create_oval(px(12), y - px(14), px(40), y + px(14), outline=WHITE)
-        hero_canvas.create_text(px(26), y, text=icon, fill=WHITE, font=(FONT, 9, "bold"))
-        y = y + px(44)
-
-
 # "Say yes TO YOUR VACATION", the package name and the button
 def draw_hero_text(package):
-    left = px(110)
-    hero_canvas.create_text(left, px(115), text="Say yes", font=("Segoe Script", 40), fill=WHITE, anchor="w")
-    hero_canvas.create_text(left, px(190), text="TO YOUR VACATION", font=(FONT, 38, "bold"),
+    left = max(px(110), hero_width // 12)
+    top = (hero_height - px(430)) // 2
+    hero_canvas.create_text(left, top + px(115), text="Say yes", font=("Segoe Script", 40), fill=WHITE, anchor="w")
+    hero_canvas.create_text(left, top + px(190), text="TO YOUR VACATION", font=(FONT, 38, "bold"),
                             fill=WHITE, anchor="w")
-    hero_canvas.create_text(left, px(245), text=package["Title"] + "   •   " + str(package["Location"]),
+    hero_canvas.create_text(left, top + px(245), text=package["Title"] + "   •   " + str(package["Location"]),
                             font=(FONT, 13, "bold"), fill=TEAL, anchor="w")
-    hero_canvas.create_text(left, px(275), text="From " + peso(package["Price"]) + " / person   •   " +
+    hero_canvas.create_text(left, top + px(275), text="From " + peso(package["Price"]) + " / person   •   " +
                             duration_text(package["Duration"], package["DurationNights"]),
                             font=(FONT, 12), fill=WHITE, anchor="w")
-    hero_canvas.create_window(left, px(335), window=hero_button, anchor="w")
+    hero_canvas.create_window(left, top + px(335), window=hero_button, anchor="w")
 
 
 # The 4 small photos on the right
 def draw_hero_thumbnails():
-    x = px(HERO_WIDTH - 172)
-    y = px(48)
+    x = hero_width - max(px(172), hero_width // 12 + px(140))
+    y = (hero_height - px(342)) // 2
     number = 0
     for package in hero_packages:
         photo = load_image(package["ImageFileName"], px(140), px(78))
@@ -319,8 +377,8 @@ def draw_hero_thumbnails():
 
 # The dots at the bottom (the teal one is the current photo)
 def draw_hero_dots():
-    x = px(HERO_WIDTH) // 2 - (len(hero_packages) - 1) * px(11)
-    y = px(HERO_HEIGHT - 24)
+    x = hero_width // 2 - (len(hero_packages) - 1) * px(11)
+    y = hero_height - px(24)
     for number in range(len(hero_packages)):
         color = WHITE
         if number == hero_index:
@@ -552,6 +610,7 @@ def show_blog_page(parent, data):
 def show_destinations_page(parent, data):
     global results_frame
     page = make_scroll_area(parent)
+    start_card_page()
     add_section_title(page, "Destinations", "Find your next adventure")
     make_filter_vars(data)
     build_filter_panel(page)
@@ -751,7 +810,7 @@ def show_details_page(parent, package_id):
 def build_details_top(page, package):
     top = Frame(page, bg=WHITE)
     top.pack(pady=px(20))
-    Label(top, image=load_image(package["ImageFileName"], px(620), px(390)), bg=WHITE).grid(row=0, column=0, sticky="n")
+    build_gallery(top, package)
     info = Frame(top, bg=LIGHT_TEAL, padx=px(22), pady=px(18))
     info.grid(row=0, column=1, sticky="nsew", padx=(px(18), 0))
     Label(info, text=package["PackageType"].upper() + "  •  " + str(package["CategoryName"]),
@@ -767,6 +826,43 @@ def build_details_top(page, package):
     Label(info, text="per person", font=SMALL_FONT, fg=GRAY, bg=LIGHT_TEAL).pack(anchor="w")
     teal_button(info, "BOOK NOW", lambda: book_now(package["PackageID"])).pack(fill=X, pady=(px(12), px(6)))
     light_button(info, "Back to Destinations", go_to_destinations).pack(fill=X)
+
+
+# The big photo with small photos under it (click one to see it big)
+def build_gallery(top, package):
+    box = Frame(top, bg=WHITE)
+    box.grid(row=0, column=0, sticky="n")
+    gallery["big"] = Label(box, image=load_image(package["ImageFileName"], px(620), px(390)), bg=WHITE)
+    gallery["big"].pack()
+    images = database.get_package_images(package["PackageID"])
+    if len(images) < 2:
+        return
+    thumbs = Frame(box, bg=WHITE)
+    thumbs.pack(anchor="w", pady=(px(8), 0))
+    gallery["buttons"] = []
+    number = 0
+    for image in images:
+        button = make_gallery_thumb(thumbs, image["ImageFileName"])
+        button.grid(row=number // 6, column=number % 6, padx=(0, px(6)), pady=(0, px(6)))
+        number = number + 1
+    gallery["buttons"][0].config(bg=TEAL)
+
+
+# One small photo of the gallery
+def make_gallery_thumb(parent, file_name):
+    button = Button(parent, image=load_image(file_name, px(94), px(60)), relief=FLAT, bd=0, bg=WHITE,
+                    padx=2, pady=2, cursor="hand2", activebackground=TEAL)
+    button.config(command=lambda: show_gallery_photo(file_name, button))
+    gallery["buttons"].append(button)
+    return button
+
+
+# Show one photo of the gallery big (the chosen small photo gets a teal border)
+def show_gallery_photo(file_name, chosen_button):
+    gallery["big"].config(image=load_image(file_name, px(620), px(390)))
+    for button in gallery["buttons"]:
+        button.config(bg=WHITE)
+    chosen_button.config(bg=TEAL)
 
 
 # One "Label: value" line in the details box
@@ -891,13 +987,13 @@ def make_form_card(parent, title, subtitle):
     return card
 
 
-# The log in page (email or phone + password)
+# The log in page (email, phone or username + password)
 def show_login_page(parent, data):
     card = make_form_card(parent, "Welcome back!", "Log in with your email or phone number")
     login_form["login"] = StringVar()
     login_form["password"] = StringVar()
     login_form["show"] = IntVar(value=0)
-    first_entry = form_entry(card, "Email or phone number", login_form["login"])
+    first_entry = form_entry(card, "Email, phone number or username", login_form["login"])
     login_form["password_entry"] = form_entry(card, "Password", login_form["password"], secret=True)
     login_form["password_entry"].bind("<Return>", on_login_enter)
     Checkbutton(card, text="Show password", variable=login_form["show"], command=toggle_login_password,
@@ -928,7 +1024,7 @@ def check_login():
     login = login_form["login"].get().strip()
     password = login_form["password"].get()
     if login == "" or password == "":
-        messagebox.showwarning("Log In", "Please enter your email or phone number and your password.")
+        messagebox.showwarning("Log In", "Please enter your email, phone number or username, and your password.")
         return
     try:
         user = database.find_user_by_login(login)

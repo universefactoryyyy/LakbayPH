@@ -67,6 +67,14 @@ CREATE TABLE IF NOT EXISTS packagedetails (
     Highlights TEXT
 );
 
+CREATE TABLE IF NOT EXISTS packageimages (
+    ImageID INTEGER PRIMARY KEY AUTOINCREMENT,
+    PackageID INTEGER NOT NULL REFERENCES tourpackages (PackageID) ON DELETE CASCADE,
+    ImageFileName TEXT NOT NULL,
+    CreatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (PackageID, ImageFileName)
+);
+
 CREATE TABLE IF NOT EXISTS packagelocations (
     PackageID INTEGER PRIMARY KEY REFERENCES tourpackages (PackageID) ON DELETE CASCADE,
     Location TEXT NOT NULL
@@ -233,6 +241,7 @@ def setup_database():
         count = connection.execute("SELECT COUNT(*) FROM tourpackages").fetchone()[0]
         if count == 0:
             insert_seed_data(connection)
+        update_old_data(connection)
         connection.commit()
         connection.close()
     except Exception:
@@ -258,8 +267,23 @@ def insert_seed_data(connection):
     # Fix: the admin password is saved as a salted hash, not plain text
     connection.execute(
         "INSERT INTO users (UserID, Username, Email, Password, FirstName, LastName, Role) "
-        "VALUES (1, 'admin_ken', 'adminken@email.com', ?, 'Ken', 'Harold', 'Admin')",
-        (helpers.hash_password("lphttken"),))
+        "VALUES (1, 'admin', 'admin@gmail.com', ?, 'Ken', 'Harold', 'Admin')",
+        (helpers.hash_password("admin123"),))
+
+
+# Bring a database made by an older version of the app up to date
+def update_old_data(connection):
+    # The old admin account becomes admin / admin@gmail.com / admin123
+    connection.execute(
+        "UPDATE users SET Username = 'admin', Email = 'admin@gmail.com', Password = ? "
+        "WHERE Username = 'admin_ken' AND Role = 'Admin'",
+        (helpers.hash_password("admin123"),))
+    # Every main picture is also the first picture in the package's gallery
+    connection.execute(
+        "INSERT INTO packageimages (PackageID, ImageFileName) "
+        "SELECT PackageID, ImageFileName FROM packagedetails "
+        "WHERE ImageFileName IS NOT NULL AND ImageFileName <> '' "
+        "AND PackageID NOT IN (SELECT PackageID FROM packageimages)")
 
 
 # ======================= Packages =======================
@@ -269,7 +293,8 @@ PACKAGE_SELECT = """
 SELECT tp.*, pd.IdealFor, pd.Inclusions, pd.ImageFileName, pd.Highlights,
        pl.Location, tc.CategoryName,
        IFNULL(r.AvgRating, 0) AS AvgRating, IFNULL(r.ReviewCount, 0) AS ReviewCount,
-       IFNULL(b.TotalBooked, 0) AS TotalBooked
+       IFNULL(b.TotalBooked, 0) AS TotalBooked,
+       (SELECT COUNT(*) FROM packageimages pi WHERE pi.PackageID = tp.PackageID) AS ImageCount
 FROM tourpackages tp
 LEFT JOIN packagedetails pd ON pd.PackageID = tp.PackageID
 LEFT JOIN packagelocations pl ON pl.PackageID = tp.PackageID
@@ -356,13 +381,14 @@ def get_slots_left(package_id, travel_date):
 
 # ======================= Users =======================
 
-# Find a user by email or phone number
+# Find a user by email, phone number or username
 def find_user_by_login(login_text):
     login = login_text.strip()
     if "@" in login:
         return fetch_one("SELECT * FROM users WHERE Email = ?", (login.lower(),))
-    phone = helpers.normalize_phone(login)
-    return fetch_one("SELECT * FROM users WHERE Phone = ?", (phone,))
+    if helpers.is_valid_phone(login):
+        return fetch_one("SELECT * FROM users WHERE Phone = ?", (helpers.normalize_phone(login),))
+    return fetch_one("SELECT * FROM users WHERE Username = ? COLLATE NOCASE", (login,))
 
 
 # One user by ID
@@ -741,10 +767,10 @@ def insert_package_rows(connection, package):
         package_values(package) + (now, now))
     package_id = cursor.lastrowid
     connection.execute(
-        "INSERT INTO packagedetails (PackageID, PackageType, IdealFor, Inclusions, ImageFileName, "
-        "Highlights) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO packagedetails (PackageID, PackageType, IdealFor, Inclusions, Highlights) "
+        "VALUES (?, ?, ?, ?, ?)",
         (package_id, package["PackageType"], package["IdealFor"], package["Inclusions"],
-         package["ImageFileName"], package["Highlights"]))
+         package["Highlights"]))
     connection.execute("INSERT INTO packagelocations (PackageID, Location) VALUES (?, ?)",
                        (package_id, package["Location"]))
     return package_id
@@ -758,10 +784,10 @@ def update_package_rows(connection, package, package_id):
         "IsGroupPackage = ?, GroupSize = ?, IsActive = ?, UpdatedAt = ? WHERE PackageID = ?",
         package_values(package) + (helpers.now_text(), package_id))
     connection.execute(
-        "UPDATE packagedetails SET PackageType = ?, IdealFor = ?, Inclusions = ?, ImageFileName = ?, "
+        "UPDATE packagedetails SET PackageType = ?, IdealFor = ?, Inclusions = ?, "
         "Highlights = ? WHERE PackageID = ?",
         (package["PackageType"], package["IdealFor"], package["Inclusions"],
-         package["ImageFileName"], package["Highlights"], package_id))
+         package["Highlights"], package_id))
     connection.execute("UPDATE packagelocations SET Location = ? WHERE PackageID = ?",
                        (package["Location"], package_id))
 
@@ -790,14 +816,80 @@ def soft_delete_package(package_id):
                (helpers.now_text(), package_id))
 
 
-# Save the picture file name of a package
+# Make a picture the main (cover) picture of a package
 def set_package_image(package_id, file_name):
     run_change("UPDATE packagedetails SET ImageFileName = ? WHERE PackageID = ?", (file_name, package_id))
 
 
-# The picture file names of all packages
+# The main picture file names of all packages
 def get_image_file_names():
     return fetch_all("SELECT PackageID, ImageFileName FROM packagedetails ORDER BY PackageID")
+
+
+# All pictures of a package, the main picture first
+def get_package_images(package_id):
+    return fetch_all(
+        "SELECT pi.* FROM packageimages pi JOIN packagedetails pd ON pd.PackageID = pi.PackageID "
+        "WHERE pi.PackageID = ? ORDER BY (pi.ImageFileName = pd.ImageFileName) DESC, pi.ImageID",
+        (package_id,))
+
+
+# Add pictures to a package (one transaction). The first one becomes the main
+# picture if the package has none. Pictures it already has are skipped.
+def add_package_images(package_id, file_names):
+    connection = connect()
+    try:
+        for file_name in file_names:
+            connection.execute("INSERT OR IGNORE INTO packageimages (PackageID, ImageFileName, CreatedAt) "
+                               "VALUES (?, ?, ?)", (package_id, file_name, helpers.now_text()))
+        if len(file_names) > 0:
+            connection.execute("UPDATE packagedetails SET ImageFileName = ? WHERE PackageID = ? "
+                               "AND (ImageFileName IS NULL OR ImageFileName = '')",
+                               (file_names[0], package_id))
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
+
+
+# Remove a picture from a package. If it was the main picture, the next one
+# becomes the main picture (or none if it was the last).
+def remove_package_image(package_id, file_name):
+    connection = connect()
+    try:
+        connection.execute("DELETE FROM packageimages WHERE PackageID = ? AND ImageFileName = ?",
+                           (package_id, file_name))
+        next_image = connection.execute("SELECT ImageFileName FROM packageimages WHERE PackageID = ? "
+                                        "ORDER BY ImageID LIMIT 1", (package_id,)).fetchone()
+        new_cover = None
+        if next_image is not None:
+            new_cover = next_image[0]
+        connection.execute("UPDATE packagedetails SET ImageFileName = ? WHERE PackageID = ? AND ImageFileName = ?",
+                           (new_cover, package_id, file_name))
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
+
+
+# Change the file name of a picture (used when Import Folder finds fdbasic.png for fdbasic.jpg)
+def rename_package_image(package_id, old_name, new_name):
+    connection = connect()
+    try:
+        connection.execute("UPDATE OR IGNORE packageimages SET ImageFileName = ? WHERE PackageID = ? AND ImageFileName = ?",
+                           (new_name, package_id, old_name))
+        connection.execute("UPDATE packagedetails SET ImageFileName = ? WHERE PackageID = ? AND ImageFileName = ?",
+                           (new_name, package_id, old_name))
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
 
 
 # ======================= Admin: dashboard =======================
@@ -817,6 +909,27 @@ def get_dashboard_stats():
     stats["PendingDiscounts"] = fetch_one(
         "SELECT COUNT(*) AS N FROM promodiscounts WHERE Status = 'Pending'")["N"]
     return stats
+
+
+# How many bookings have each status, like {"Pending": 3, "Confirmed": 1}
+def get_booking_counts():
+    counts = {}
+    for row in fetch_all("SELECT Status, COUNT(*) AS N FROM bookings GROUP BY Status"):
+        counts[row["Status"]] = row["N"]
+    return counts
+
+
+# How many discount requests have each status
+def get_promo_counts():
+    counts = {}
+    for row in fetch_all("SELECT Status, COUNT(*) AS N FROM promodiscounts GROUP BY Status"):
+        counts[row["Status"]] = row["N"]
+    return counts
+
+
+# The newest bookings (for the dashboard)
+def get_recent_bookings(limit):
+    return fetch_all(BOOKING_SELECT + " ORDER BY b.BookingID DESC LIMIT ?", (limit,))
 
 
 # Number of bookings (not cancelled) for each package type, for the bar chart

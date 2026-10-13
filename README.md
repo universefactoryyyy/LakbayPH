@@ -55,11 +55,13 @@ not needed there.
 
 ## Default admin login
 
-| Email | Password |
-|-------|----------|
-| `adminken@email.com` | `lphttken` |
+| Username | Email | Password |
+|----------|-------|----------|
+| `admin` | `admin@gmail.com` | `admin123` |
 
-The admin uses the same Log In page and is sent to the Admin Panel.
+The admin uses the same Log In page (type the username **or** the email) and is sent to the
+Admin Panel. A database made by an older version (with `admin_ken`) is changed to this
+account automatically when the app starts.
 
 ## Where the data is saved
 
@@ -77,11 +79,16 @@ To **start over with fresh data**, close the app and delete that folder.
 
 - The `assets\images` folder has simple drawn pictures for all 36 packages, so the app never
   looks empty.
-- To use real photos, open **Admin Panel > Packages** and click **Import Folder**. Choose the
-  folder with your photos; every file whose name matches a package (`fdbasic.jpg`,
-  `domboracay.png`, `intnewyork.jpeg`, ...) is copied in. The same name with another picture
-  type (for example `fdbasic.png`) also works.
-- **Upload Image** changes the picture of one package (png / jpg / jpeg).
+- Every package can have **many pictures**. The **main picture** is shown on the cards, the
+  home banner and My Bookings; the package page shows all of them (click a small picture to
+  see it big).
+- **Upload Pictures** (Admin Panel > Packages, choose a package first) adds one or more
+  png / jpg / jpeg files at once (hold Ctrl or Shift in the file window). Click a small
+  picture, then **Set as Main** or **Remove**.
+- To use real photos for all packages, click **Import Folder** and choose the folder with your
+  photos. Every file whose name matches a package (`fdbasic.jpg`, `domboracay.png`, ...) is
+  copied in; the same name with another picture type (for example `fdbasic.png`) also works.
+  Files like `fdbasic_2.jpg` or `fdbasic_beach.png` are added as more pictures of that package.
 - If a picture is missing, `placeholder.jpg` is shown.
 
 ## Windows SmartScreen warning
@@ -110,3 +117,6 @@ This is normal for school projects and other unsigned apps.
 - Payments other than "Pay on Trip" are **simulated**: a fake transaction reference is made and
   no card numbers are ever asked or saved.
 - Deleting a package only hides it (`IsActive = 0`), so old bookings still work.
+- New table **`packageimages`** (ImageID, PackageID, ImageFileName) for the extra pictures of a
+  package. `packagedetails.ImageFileName` is still the main picture.
+- You can log in with your **username** too (not only email or phone).

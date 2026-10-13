@@ -42,6 +42,7 @@ def show_page(page_name, data=None):
     for widget in root.winfo_children():
         widget.destroy()
     helpers.scroll_canvas = None
+    helpers.resize_function = None
 
     # Admin pages: check the role in the database, not just the buttons
     if page_name.startswith("admin"):

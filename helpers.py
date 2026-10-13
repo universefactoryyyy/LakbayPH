@@ -498,6 +498,10 @@ def show_error(message, error=None):
 # The canvas of the page that is shown now (the mouse wheel scrolls it)
 scroll_canvas = None
 
+# A function of the open page that is called with the new width when the
+# window changes size (or None). show_page sets it back to None.
+resize_function = None
+
 
 # Make a page that scrolls. Returns the frame where you put the widgets.
 def make_scroll_area(parent, bg=WHITE):
@@ -526,6 +530,8 @@ def on_inner_resize(event):
 # The window changed size: make the content as wide as the canvas
 def on_canvas_resize(event):
     event.widget.itemconfig("inner", width=event.width)
+    if resize_function is not None and event.widget == scroll_canvas:
+        resize_function(event.width)
 
 
 # Scroll the page with the mouse wheel
