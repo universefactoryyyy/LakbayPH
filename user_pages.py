@@ -1,6 +1,6 @@
 # user_pages.py - the pages that customers see:
 # home, destinations, package details, log in / sign up, booking,
-# my bookings, profile, contact and blog.
+# my bookings, profile and contact.
 
 import random
 from tkinter import *
@@ -71,7 +71,7 @@ def build_top_bar(window, page_name):
     name.bind("<Button-1>", on_logo_click)
 
     # Page links
-    links = [("Home", "home"), ("Destinations", "destinations"), ("Contact Us", "contact"), ("Blog", "blog")]
+    links = [("Home", "home"), ("Destinations", "destinations"), ("Contact Us", "contact")]
     for link in links:
         make_nav_link(inner, link[0], link[1], page_name).pack(side=LEFT, padx=px(4))
 
@@ -252,7 +252,7 @@ def build_footer(parent):
     links = Frame(columns, bg=DEEP_TEAL)
     links.grid(row=0, column=1, sticky="n", padx=px(40))
     Label(links, text="Quick Links", font=BOLD_FONT, fg=TEAL, bg=DEEP_TEAL).pack(anchor="w")
-    for link in [("Home", "home"), ("Destinations", "destinations"), ("Contact Us", "contact"), ("Blog", "blog")]:
+    for link in [("Home", "home"), ("Destinations", "destinations"), ("Contact Us", "contact")]:
         make_footer_link(links, link[0], link[1]).pack(anchor="w")
     contact = Frame(columns, bg=DEEP_TEAL)
     contact.grid(row=0, column=2, sticky="n", padx=px(40))
@@ -535,7 +535,7 @@ def make_review_card(parent, review):
     return card
 
 
-# ======================= Contact Us and Blog =======================
+# ======================= Contact Us =======================
 
 # A simple contact page with our details and a message form
 def show_contact_page(parent, data):
@@ -570,38 +570,6 @@ def send_contact_message():
         return
     messagebox.showinfo("Contact Us", "Thank you, " + step_vars["name"].get().strip() + "! We got your message.")
     helpers.go_to("contact")
-
-
-# A few travel tips for the blog page
-BLOG_POSTS = [
-    ("5 Tips for Your First Freediving Trip", "fdbasic.jpg",
-     "Relax and breathe slowly before every dive. Never dive alone, always listen to your instructor, "
-     "and drink plenty of water. Start with a day tour before trying a multi-day course."),
-    ("Island Hopping in Palawan on a Budget", "dompalawan.jpg",
-     "Travel during the shoulder months, join group tours, and bring your own snorkel and dry bag. "
-     "Book your Underground River permit early because slots run out quickly."),
-    ("First Time in Japan? Read This", "inttokyo.png",
-     "Get a JR Pass before you fly, carry some cash, and learn a few polite words like arigatou. "
-     "Trains are always on time, so plan your days around the train schedule."),
-]
-
-
-# The blog page with short travel articles
-def show_blog_page(parent, data):
-    page = make_scroll_area(parent)
-    add_section_title(page, "LakbayPH Blog", "Travel tips and stories")
-    for post in BLOG_POSTS:
-        card = Frame(page, bg=WHITE, highlightbackground=BORDER, highlightthickness=1)
-        card.pack(pady=px(8))
-        Label(card, image=load_image(post[1], px(280), px(170)), bg=WHITE).pack(side=LEFT)
-        body = Frame(card, bg=WHITE, padx=px(18), pady=px(14))
-        body.pack(side=LEFT, fill=BOTH)
-        Label(body, text=post[0], font=HEADING_FONT, fg=DARK_TEAL, bg=WHITE).pack(anchor="w")
-        Label(body, text="By the LakbayPH Team", font=SMALL_FONT, fg=GRAY, bg=WHITE).pack(anchor="w")
-        Label(body, text=post[2], font=NORMAL_FONT, fg=DARK_TEAL, bg=WHITE, wraplength=px(520),
-              justify=LEFT).pack(anchor="w", pady=px(8))
-        light_button(body, "See trips", go_to_destinations).pack(anchor="w")
-    build_footer(page)
 
 
 # ======================= Destinations =======================

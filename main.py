@@ -28,7 +28,6 @@ PAGES = {
     "my_bookings": user_pages.show_my_bookings_page,
     "profile": user_pages.show_profile_page,
     "contact": user_pages.show_contact_page,
-    "blog": user_pages.show_blog_page,
     "admin_dashboard": admin_pages.show_dashboard_page,
     "admin_packages": admin_pages.show_packages_page,
     "admin_bookings": admin_pages.show_bookings_page,

@@ -11,7 +11,7 @@ and PWD / Senior Citizen discount requests.
 |------|--------------|
 | `main.py` | Starts the app, makes the window, switches pages (`show_page`) |
 | `database.py` | Creates the SQLite database, adds the starting data, all the queries |
-| `user_pages.py` | Home, destinations, details, log in / sign up, booking, my bookings, profile, contact, blog |
+| `user_pages.py` | Home, destinations, details, log in / sign up, booking, my bookings, profile, contact |
 | `admin_pages.py` | Dashboard, packages (create / read / update / delete + pictures), bookings, discount requests |
 | `helpers.py` | Colors, peso format, validation, password hashing, dates, pictures, scrolling |
 | `test_lakbayph.py` | Tests for the price computation and the email / phone / password checks |
