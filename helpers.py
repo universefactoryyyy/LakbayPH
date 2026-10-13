@@ -371,6 +371,22 @@ def read_date_spinboxes(date_vars):
 image_cache = {}
 
 
+# The bundled photos of one package, e.g. package1.1.jpg, package1.2.png, package1.3.jpg
+def bundled_picture_names(package_id):
+    names = []
+    for number in (1, 2, 3):
+        found = None
+        for extension in (".jpg", ".png", ".jpeg"):
+            name = "package" + str(package_id) + "." + str(number) + extension
+            path = resource_path(os.path.join("assets", "images", name))
+            if os.path.exists(path):
+                found = name
+                break
+        if found is not None:
+            names.append(found)
+    return names
+
+
 # Find the picture file: uploaded folder first, then bundled assets, else placeholder
 def find_image_path(file_name):
     if file_name:

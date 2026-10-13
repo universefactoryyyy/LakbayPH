@@ -269,6 +269,7 @@ def insert_seed_data(connection):
         "INSERT INTO users (UserID, Username, Email, Password, FirstName, LastName, Role) "
         "VALUES (1, 'admin', 'admin@gmail.com', ?, 'Ken', 'Harold', 'Admin')",
         (helpers.hash_password("admin123"),))
+    apply_bundled_pictures(connection)
 
 
 # Bring a database made by an older version of the app up to date
@@ -278,12 +279,51 @@ def update_old_data(connection):
         "UPDATE users SET Username = 'admin', Email = 'admin@gmail.com', Password = ? "
         "WHERE Username = 'admin_ken' AND Role = 'Admin'",
         (helpers.hash_password("admin123"),))
+    apply_bundled_pictures(connection)
     # Every main picture is also the first picture in the package's gallery
     connection.execute(
         "INSERT INTO packageimages (PackageID, ImageFileName) "
         "SELECT PackageID, ImageFileName FROM packagedetails "
         "WHERE ImageFileName IS NOT NULL AND ImageFileName <> '' "
         "AND PackageID NOT IN (SELECT PackageID FROM packageimages)")
+
+
+# True if this is one of the old drawn pictures from the first version
+def is_old_seed_picture(file_name):
+    if file_name is None or file_name == "":
+        return True
+    return file_name.startswith("fd") or file_name.startswith("dom") or file_name.startswith("int")
+
+
+# Give every package its bundled photos: package1.1, package1.2, package1.3, ...
+def apply_bundled_pictures(connection):
+    for package_id in range(1, 37):
+        names = helpers.bundled_picture_names(package_id)
+        if len(names) == 0:
+            continue
+        for name in names:
+            connection.execute(
+                "INSERT OR IGNORE INTO packageimages (PackageID, ImageFileName, CreatedAt) "
+                "VALUES (?, ?, ?)", (package_id, name, helpers.now_text()))
+        set_bundled_cover(connection, package_id, names)
+
+
+# Make packageN.1 the main picture if the package still has an old / empty picture
+def set_bundled_cover(connection, package_id, names):
+    row = connection.execute("SELECT ImageFileName FROM packagedetails WHERE PackageID = ?",
+                             (package_id,)).fetchone()
+    current = None
+    if row is not None:
+        current = row[0]
+    if current in names:
+        return
+    if not is_old_seed_picture(current):
+        return
+    connection.execute("UPDATE packagedetails SET ImageFileName = ? WHERE PackageID = ?",
+                       (names[0], package_id))
+    if current:
+        connection.execute("DELETE FROM packageimages WHERE PackageID = ? AND ImageFileName = ?",
+                           (package_id, current))
 
 
 # ======================= Packages =======================

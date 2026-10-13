@@ -77,18 +77,17 @@ To **start over with fresh data**, close the app and delete that folder.
 
 ## Package pictures
 
-- The `assets\images` folder has simple drawn pictures for all 36 packages, so the app never
-  looks empty.
-- Every package can have **many pictures**. The **main picture** is shown on the cards, the
-  home banner and My Bookings; the package page shows all of them (click a small picture to
-  see it big).
+- All 36 packages already have 3 photos each (`package1.1.jpg`, `package1.2.png`,
+  `package1.3.jpg`, then `package2.1`, and so on). They are bundled in `assets\images`,
+  so a new install shows real pictures right away.
+- The **main picture** (the `.1` photo) is shown on the cards, the home banner and My Bookings.
+  The package page shows all 3; click a small picture to see it big.
 - **Upload Pictures** (Admin Panel > Packages, choose a package first) adds one or more
   png / jpg / jpeg files at once (hold Ctrl or Shift in the file window). Click a small
   picture, then **Set as Main** or **Remove**.
-- To use real photos for all packages, click **Import Folder** and choose the folder with your
-  photos. Every file whose name matches a package (`fdbasic.jpg`, `domboracay.png`, ...) is
-  copied in; the same name with another picture type (for example `fdbasic.png`) also works.
-  Files like `fdbasic_2.jpg` or `fdbasic_beach.png` are added as more pictures of that package.
+- **Import Folder** copies pictures whose names match a package (`package1.1.jpg`,
+  `package14.2.png`, ...). The same name with another picture type also works. Files like
+  `package1.1_beach.jpg` are added as extra pictures of that package.
 - If a picture is missing, `placeholder.jpg` is shown.
 
 ## Windows SmartScreen warning
